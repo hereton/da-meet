@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Socket.IO chat</title>
+    <style>
+      body {
+        margin: 0;
+        padding-bottom: 3rem;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          Helvetica, Arial, sans-serif;
+      }
+
+      #form {
+        background: rgba(0, 0, 0, 0.15);
+        padding: 0.25rem;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        display: flex;
+        height: 3rem;
+        box-sizing: border-box;
+        backdrop-filter: blur(10px);
+      }
+
+      #input {
+        border: none;
+        padding: 0 1rem;
+        flex-grow: 1;
+        border-radius: 2rem;
+        margin: 0.25rem;
+      }
+
+      #input:focus {
+        outline: none;
+      }
+
+      #form > button {
+        background: #333;
+        border: none;
+        padding: 0 1rem;
+        margin: 0.25rem;
+        border-radius: 3px;
+        outline: none;
+        color: #fff;
+      }
+
+      #messages {
+        list-style-type: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      #messages > li {
+        padding: 0.5rem 1rem;
+      }
+
+      #messages > li:nth-child(odd) {
+        background: #efefef;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div style="height: 200px; width: 200px">
+      <video
+        src=""
+        id="video"
+        style="width: 100%; height: 100%"
+        autoplay="true"
+      ></video>
+    </div>
+    <div>
+      <div class="controller">
+        <button
+          class="control-btn disable-btn"
+          onclick="toggleMicrophone(this)"
+        >
+          Open microphone
+        </button>
+        <button class="control-btn disable-btn" onclick="toggleMute(this)">
+          Mute
+        </button>
+        <button
+          class="control-btn disable-btn"
+          onclick="toggleConnection(this)"
+        >
+          Go online
+        </button>
+      </div>
+    </div>
+    <ul id="messages"></ul>
+    <form id="form" action="">
+      <input id="input" autocomplete="off" /><button>Send</button>
+    </form>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const socket = io();
+
+      const form = document.getElementById('form');
+      const input = document.getElementById('input');
+
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (input.value) {
+          socket.emit('chat', input.value);
+          input.value = '';
+        }
+      });
+      socket.on('voice', function (data) {
+        const audio = new Audio(data);
+        audio.play();
+      });
+      socket.on('chat', function (msg) {
+        const item = document.createElement('li');
+        item.textContent = msg;
+        messages.appendChild(item);
+        window.scrollTo(0, document.body.scrollHeight);
+      });
+    </script>
+    <script>
+      const userStatus = {
+        microphone: false,
+        mute: false,
+        username: 'user#' + Math.floor(Math.random() * 999999),
+        online: false,
+      };
+
+      // const usernameInput = document.getElementById("username");
+      const usernameLabel = document.getElementById('username-label');
+      const usernameDiv = document.getElementById('username-div');
+      const usersDiv = document.getElementById('users');
+      const video = document.getElementById('video');
+
+      // usernameInput.value = userStatus.username;
+      // usernameLabel.innerText = userStatus.username;
+
+      window.onload = (e) => {
+        mainFunction(500);
+      };
+
+      socket.emit('userInformation', userStatus);
+
+      function mainFunction(time) {
+        // socket.on("send", function (data) {
+        //   console.log('yest')
+        //   var audio = new Audio(data);
+        //   audio.play();
+        // });
+
+        navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+          var madiaRecorder = new MediaRecorder(stream);
+          madiaRecorder.start();
+
+          var audioChunks = [];
+
+          madiaRecorder.addEventListener('dataavailable', function (event) {
+            audioChunks.push(event.data);
+          });
+
+          madiaRecorder.addEventListener('stop', function () {
+            var audioBlob = new Blob(audioChunks);
+
+            audioChunks = [];
+
+            var fileReader = new FileReader();
+            fileReader.readAsDataURL(audioBlob);
+            fileReader.onloadend = function () {
+              if (!userStatus.microphone || !userStatus.online) return;
+
+              var base64String = fileReader.result;
+              socket.emit('voice', base64String);
+            };
+
+            madiaRecorder.start();
+
+            setTimeout(function () {
+              madiaRecorder.stop();
+            }, time);
+          });
+
+          setTimeout(function () {
+            madiaRecorder.stop();
+          }, time);
+        });
+
+        // socket.on("usersUpdate", function (data) {
+        //   usersDiv.innerHTML = '';
+        //   for (const key in data) {
+        //     if (!Object.hasOwnProperty.call(data, key)) continue;
+
+        //     const element = data[key];
+        //     const li = document.createElement("li");
+        //     li.innerText = element.username;
+        //     usersDiv.append(li);
+
+        //   }
+        // });
+      }
+
+      // usernameLabel.onclick = function () {
+      //   usernameDiv.style.display = "block";
+      //   usernameLabel.style.display = "none";
+      // }
+
+      // function changeUsername() {
+      //   userStatus.username = usernameInput.value;
+      //   usernameLabel.innerText = userStatus.username;
+      //   usernameDiv.style.display = "none";
+      //   usernameLabel.style.display = "block";
+      //   emitUserInformation();
+      // }
+
+      function toggleConnection(e) {
+        userStatus.online = !userStatus.online;
+
+        editButtonClass(e, userStatus.online);
+        emitUserInformation();
+      }
+
+      function toggleMute(e) {
+        userStatus.mute = !userStatus.mute;
+
+        editButtonClass(e, userStatus.mute);
+        console.log(userStatus);
+        emitUserInformation();
+      }
+
+      function toggleMicrophone(e) {
+        userStatus.microphone = !userStatus.microphone;
+        editButtonClass(e, userStatus.microphone);
+        emitUserInformation();
+      }
+
+      function editButtonClass(target, bool) {
+        const classList = target.classList;
+        classList.remove('enable-btn');
+        classList.remove('disable-btn');
+
+        if (bool) return classList.add('enable-btn');
+
+        classList.add('disable-btn');
+      }
+
+      function emitUserInformation() {
+        socket.emit('userInformation', userStatus);
+      }
+    </script>
+  </body>
+</html>
